@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8" />
+<title>Wanna be my Valentine's darling</title>
+<style>
+:root{
+  --pink-1: #ffc0cb;
+  --pink-2: #ff3399;
+  --pink-3: #ff6699;
+  --accent-white: #fff;
+}
+
+/* Layout */
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  justify-content: flex-start;
+  font-family: Arial, sans-serif;
+  background-color: var(--pink-1);
+  margin: 0;
+  padding-top: 50px;
+  color: #62121f;
+}
+
+/* Title */
+h2 {
+  margin: 0 0 30px 0;
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  text-align: center;
+}
+
+/* Buttons area */
+#buttons {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding: 10px;
+}
+
+/* Buttons */
+button {
+  font-size: clamp(18px, 2.6vw, 22px);
+  padding: 12px 20px;
+  margin: 10px;
+  cursor: pointer;
+  border-radius: 8px;
+  border: none;
+  color: var(--accent-white);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.08);
+  position: relative;
+  user-select: none;
+}
+button:focus {
+  outline: 3px solid rgba(255,51,153,0.25);
+  transform: translateY(-2px);
+}
+
+/* specific buttons */
+#yes { background-color: var(--pink-2); }
+#no { background-color: #ff6666; }
+
+/* message shown when yes clicked */
+#letter {
+  display: none;
+  margin-top: 20px;
+  font-size: clamp(16px, 2.2vw, 20px);
+  color: var(--pink-2);
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* from text */
+#from {
+  display: none;
+  margin-top: 10px;
+  font-size: clamp(14px, 1.8vw, 18px);
+  font-style: italic;
+  color: var(--pink-3);
+  text-align: center;
+}
+
+/* small unobtrusive toast near the No button */
+#no-toast {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.92);
+  color: #b2005a;
+  padding: 6px 10px;
+  border-radius: 12px;
+  font-size: 14px;
+  box-shadow: 0 6px 12px rgba(0,0,0,0.08);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 250ms ease, transform 250ms ease;
+  white-space: nowrap;
+}
+
+/* hearts animation that appears on success */
+.hearts {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: -10px;
+  width: 0;
+  height: 0;
+}
+.heart {
+  position: fixed;
+  width: 18px;
+  height: 18px;
+  transform: translate(-50%, -50%) rotate(-45deg) scale(0.9);
+  background: var(--pink-2);
+  left: 50%;
+  top: 50%;
+  opacity: 0;
+  border-radius: 3px;
+  z-index: 2000;
+  animation: floatUp 1200ms ease forwards;
+}
+.heart::before,
+.heart::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  background: var(--pink-2);
+  border-radius: 50%;
+  top: -9px;
+  left: 0;
+}
+.heart::after {
+  left: -9px;
+  top: 0;
+}
+
+@keyframes floatUp {
+  0% { transform: translate(-50%, -50%) rotate(-45deg) scale(0.6); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) rotate(-20deg) scale(1); opacity: 0; }
+}
+
+/* small responsive tweaks */
+@media (max-width:420px){
+  #buttons { gap: 10px; padding: 6px; }
+  button { padding: 10px 14px; }
+}
+</style>
+</head>
+<body>
+
+<h2 id="title">Wanna be my Valentine's darling 💘</h2>
+
+<div id="buttons" aria-hidden="false">
+  <button id="yes" aria-label="Yes, I will be your Valentine" role="button">Yes 💕</button>
+  <button id="no" aria-label="No, thanks" role="button">No 😅</button>
+
+  <div id="no-toast" aria-hidden="true">You sure?</div>
+</div>
+
+<div id="letter" role="status" aria-live="polite">
+  Thank you for clicking Yes 🫶<br>
+  I just want to tell you…<br>
+  I love you so much 😙
+</div>
+
+<div id="from">From, Denny</div>
+
+<script>
+/* Brief behavior:
+ - Yes: hide buttons, reveal letter + little hearts animation.
+ - No: dodge on hover/mouseenter; small toast feedback instead of alerts.
+ - Movement constrained to viewport.
+ - Accessibility: aria attributes + keyboard-friendly.
+*/
+
+const yesBtn = document.getElementById('yes');
+const noBtn = document.getElementById('no');
+const letter = document.getElementById('letter');
+const from = document.getElementById('from');
+const noToast = document.getElementById('no-toast');
+let noHoverCount = 0;
+let lastTransform = {x:0, y:0};
+
+/* Utility: get random integer in range [min, max] */
+function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+/* Constrain a position to viewport with margins */
+function constrainPos(x, y, w, h) {
+  const marginTop = 80; // leave title area free
+  const margin = 8;
+  const maxX = window.innerWidth - w - margin;
+  const maxY = window.innerHeight - h - margin;
+  const nx = Math.max(margin, Math.min(x, maxX));
+  const ny = Math.max(marginTop, Math.min(y, maxY));
+  return {x: nx, y: ny};
+}
+
+/* Move the "No" button by setting transform so it stays visually within viewport.
+   We compute desired absolute coordinates and convert to relative transform from current rect. */
+function moveNoButton(range){
+  const rect = noBtn.getBoundingClientRect();
+  const btnW = rect.width;
+  const btnH = rect.height;
+
+  // choose a target center point
+  const targetX = rect.left + randInt(-range, range);
+  const targetY = rect.top + randInt(-range, range);
+
+  const constrained = constrainPos(targetX, targetY, btnW, btnH);
+
+  const dx = constrained.x - rect.left;
+  const dy = constrained.y - rect.top;
+
+  lastTransform.x += dx;
+  lastTransform.y += dy;
+
+  noBtn.style.transition = 'transform 220ms ease';
+  noBtn.style.transform = `translate(${lastTransform.x}px, ${lastTransform.y}px)`;
+}
+
+/* Show a brief toast above the No button */
+let toastTimer = null;
+function showNoToast(text){
+  noToast.textContent = text;
+  noToast.style.opacity = '1';
+  noToast.style.transform = 'translateX(-50%) translateY(-6px)';
+  noToast.setAttribute('aria-hidden','false');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> {
+    noToast.style.opacity = '0';
+    noToast.style.transform = 'translateX(-50%) translateY(0)';
+    noToast.setAttribute('aria-hidden','true');
+  }, 1100);
+}
+
+/* Event: user clicks Yes */
+function showLetter(){
+  // hide buttons
+  document.getElementById('buttons').style.display = 'none';
+  letter.style.display = 'block';
+  from.style.display = 'block';
+  // small hearts animation
+  spawnHearts(10);
+}
+
+/* Create hearts that float upward from the center of the buttons area */
+function spawnHearts(n){
+  for(let i=0;i<n;i++){
+    const h = document.createElement('div');
+    h.className = 'heart';
+    // random offset direction and distance (CSS custom properties used in animation)
+    const dx = (randInt(-120,120)) + 'px';
+    const dy = (randInt(-160,-60)) + 'px';
+    h.style.setProperty('--dx', dx);
+    h.style.setProperty('--dy', dy);
+    // start slightly randomized near the yes button
+    const yesRect = yesBtn.getBoundingClientRect();
+    h.style.left = (yesRect.left + yesRect.width/2 + randInt(-20,20)) + 'px';
+    h.style.top = (yesRect.top + yesRect.height/2 + randInt(-20,20)) + 'px';
+    document.body.appendChild(h);
+    // remove after animation finishes
+    setTimeout(()=> h.remove(), 1400);
+  }
+}
+
+/* No button behavior: on pointerenter we move it; after several tries we increase distance. */
+noBtn.addEventListener('pointerenter', (e) => {
+  noHoverCount++;
+  // choose a message on first couple of entries
+  if(noHoverCount === 1) showNoToast('You sure?');
+  else if(noHoverCount === 2) showNoToast('Really?');
+  else showNoToast('Hmm, think again 😏');
+
+  // increase range with more hovers
+  const range = noHoverCount < 3 ? 60 : Math.min(220, 60 + (noHoverCount-2)*40);
+  moveNoButton(range);
+
+  // After dodging, remove it from tab order briefly so keyboard focus doesn't land there
+  noBtn.setAttribute('tabindex','-1');
+  setTimeout(()=> noBtn.setAttribute('tabindex','0'), 900);
+});
+
+/* For touch users: on touchstart, nudge the button a bit (so it feels playful but not impossible) */
+noBtn.addEventListener('touchstart', (e) => {
+  noHoverCount++;
+  moveNoButton(60);
+});
+
+/* Replace alert-style responses when clicked */
+noBtn.addEventListener('click', (e) => {
+  showNoToast("I knew you'd hesitate 😉");
+  moveNoButton(80);
+});
+
+/* Click yes */
+yesBtn.addEventListener('click', showLetter);
+
+/* Keyboard accessibility: Enter/Space activates focused button */
+[yesBtn, noBtn].forEach(btn => {
+  btn.addEventListener('keydown', (ev) => {
+    if(ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      btn.click();
+    }
+  });
+});
+
+/* Small improvement: if window resizes drastically, reset the no button so it doesn't fly off-screen */
+window.addEventListener('resize', () => {
+  lastTransform = {x:0, y:0};
+  noBtn.style.transform = '';
+  noBtn.style.transition = 'transform 200ms ease';
+});
+
+/* Expose showLetter to inline onclick compatibility (if used) */
+window.showLetter = showLetter;
+</script>
+</body>
+</html>
